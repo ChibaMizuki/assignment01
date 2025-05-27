@@ -3,7 +3,7 @@
 //--------------------------------------------------------------
 void ofApp::setup(){
 	//ゲキヤクアイコン
-	//src.load("gkyk.jpg");
+	src.load("gkyk.jpg");
 
 	// カードイラスト
 	//src.load("mzk.jpg");
@@ -12,7 +12,7 @@ void ofApp::setup(){
 	//src.load("kbs.jpg");
 
 	//POPSONG米津さん
-	src.load("yk.jpg");
+	//src.load("yk.jpg");
 
 	width = src.getWidth();
 	height = src.getHeight();
@@ -166,7 +166,7 @@ void ofApp::thresholding() {
 	double Sbmax = 0;
 	double Sb = 0;
 	int t = 0;
-	int bright[256] = {};
+	int lumin[256] = {};
 
 	//輝度0～255のピクセル数をカウント
 	for (int y = 0; y < height; y++) {
@@ -178,7 +178,7 @@ void ofApp::thresholding() {
 
 			int gray = R * 0.299 + G * 0.587 + B * 0.114;
 
-			bright[gray]++;
+			lumin[gray]++;
 
 		}
 	}
@@ -204,16 +204,16 @@ void ofApp::thresholding() {
 
 		//クラス１（1～tまで）
 		for (int j = 1; j <= i; j++) {
-			P0 += bright[j];
-			M0 += j * bright[j];
+			P0 += lumin[j];
+			M0 += j * lumin[j];
 		}
 		R0 = P0 / Pall;
 		M0 /= P0;
 
 		//クラス２（t～255まで）
 		for (int k = 255; k > i; k--) {
-			P1 += bright[k];
-			M1 += k * bright[k];
+			P1 += lumin[k];
+			M1 += k * lumin[k];
 		}
 		R1 = P1 / Pall;
 		M1 /= P1;
@@ -313,6 +313,58 @@ void ofApp::sepia() {
 void ofApp::medianFilter() {
 	unsigned char* src_data = src.getPixels().getData();
 	unsigned char* dst_data = medianDst.getPixels().getData();
+	//ピクセル取得 -> ソート -> 中央値を取得
+	//今回は3×3のみに対応
+
+	//（floatと色データのペア）の可変長配列
+	std::vector<std::pair<int, ofColor>> colorDict;
+	//reverse()でサイズ指定（要素なしのメモリ確保）
+	colorDict.reserve(9);
+
+	for (int y = 1; y < height; y++) {
+		for (int x = 1; x < width; x++) {
+			colorDict.clear();
+			int index = y * width + x;
+
+			//3×3のソート
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					int dIndex = (y + dy) * width + (x + dx);
+
+					int R = src_data[dIndex * 3 + 0];
+					int G = src_data[dIndex * 3 + 1];
+					int B = src_data[dIndex * 3 + 2];
+
+					//static_cast<型>()で型を特定して変換できる
+					int lumin = static_cast<int>(R * 0.299 + G * 0.587 + B * 0.114);
+
+					//pairは{}
+					colorDict.push_back({ lumin, ofColor(R, G, B)});
+				}
+			}
+			//sort()はデフォルトで昇順にソート
+			//pairの時はfirst優先でソート
+			//secondのofColorは比較の定義がされていないため、以下のラムダ式により
+			//firstのみで比較を行わせる（by chatGPT）
+
+			//これがないとsecondも比較しようとするためビルドエラーが発生
+			std::sort(colorDict.begin(), colorDict.end(),
+				[](const std::pair<int, ofColor>& a, const std::pair<int, ofColor>& b) {
+					return a.first < b.first;
+				});
+
+
+			//.first, .secondでkey, valueを取得できる
+			ofColor medianColor = colorDict[colorDict.size() / 2].second;
+
+			dst_data[index * 3 + 0] = medianColor.r;
+			dst_data[index * 3 + 1] = medianColor.g;
+			dst_data[index * 3 + 2] = medianColor.b;
+		}
+	}
+
+	medianDst.update();
+	medianDst.save("median.jpg");
 }
 
 //--------------------------------------------------------------
@@ -328,7 +380,8 @@ void ofApp::draw(){
 	//reductionDst.draw(0, 0);
 	//sepiaDst.draw(0, 0);
 	//grayDst.draw(0, 0);
-	otsuDst.draw(0, 0);
+	//otsuDst.draw(0, 0);
+	medianDst.draw(0, 0);
 }
 
 //--------------------------------------------------------------
