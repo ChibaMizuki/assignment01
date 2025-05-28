@@ -12,6 +12,7 @@ class ofApp : public ofBaseApp{
 		ofImage sepiaDst;
 		ofImage grayDst;
 		ofImage medianDst;
+		ofImage pixelDst;
 
 		int width, height;
 		int dx;
@@ -43,5 +44,6 @@ class ofApp : public ofBaseApp{
 		void sepia();
 		void gray();
 		void medianFilter();
+		void pixelSort();
 		
 };

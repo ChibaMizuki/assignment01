@@ -3,15 +3,15 @@
 //--------------------------------------------------------------
 void ofApp::setup(){
 	//ゲキヤクアイコン
-	src.load("gkyk.jpg");
+	//src.load("gkyk.jpg");
 
 	// カードイラスト
 	//src.load("mzk.jpg");
 
 	//起き上がり小法師
-	//src.load("kbs.jpg");
+	src.load("kbs.jpg");
 
-	//POPSONG米津さん
+	//POPSONG
 	//src.load("yk.jpg");
 
 	width = src.getWidth();
@@ -21,12 +21,12 @@ void ofApp::setup(){
 	dx = 10;
 	dst.allocate(width, height, OF_IMAGE_COLOR);
 
-	//拡大率
-	expansion = 2.5;
+	//拡大率（整数値）
+	expansion = 3;
 	nearDst.allocate(width * expansion, height * expansion, OF_IMAGE_COLOR);
 
-	//縮小率（1 / reduce）
-	reduce = 2;
+	//縮小率（1 / reduce, 整数値）
+	reduce = 2.5;
 	reductionDst.allocate(width / reduce, height / reduce, OF_IMAGE_COLOR);
 
 	//セピア
@@ -40,6 +40,9 @@ void ofApp::setup(){
 
 	//メディアンフィルター
 	medianDst.allocate(width, height, OF_IMAGE_COLOR);
+
+	//ピクセルソート
+	pixelDst.allocate(width, height, OF_IMAGE_COLOR);
 
 	//色ずれ
 	chromaticAberration();
@@ -55,8 +58,11 @@ void ofApp::setup(){
 	gray();
 	//medianフィルター
 	medianFilter();
+	//ピクセルソート
+	pixelSort();
+	convert();
 
-	ofSetWindowShape(1080, 1080);
+	ofSetWindowShape(1500, 1500);
 
 }
 
@@ -99,7 +105,7 @@ void ofApp::chromaticAberration() {
 		}
 	}
 	dst.update();
-	dst.save("color.jpg");
+	//dst.save("color.jpg");
 }
 
 //--------------------------------------------------------------
@@ -121,7 +127,7 @@ void ofApp::nearestNeighbor() {
 		}
 	}
 	nearDst.update();
-	nearDst.save("large.jpg");
+	//nearDst.save("large.jpg");
 }
 
 //--------------------------------------------------------------
@@ -155,8 +161,9 @@ void ofApp::reduction() {
 		}
 	}
 	reductionDst.update();
-	reductionDst.save("small.jpg");
+	//reductionDst.save("small.jpg");
 }
+
 //--------------------------------------------------------------
 void ofApp::thresholding() {
 	unsigned char* src_data = src.getPixels().getData();
@@ -248,8 +255,8 @@ void ofApp::thresholding() {
 	}
 	otsuDst.update();
 	//閾値確認用
-	ofLog() << "Otsu Threshold: " << t;
-	otsuDst.save("otsu.jpg");
+	//ofLog() << "Otsu Threshold: " << t;
+	//otsuDst.save("otsu.jpg");
 }
 
 //--------------------------------------------------------------
@@ -270,7 +277,7 @@ void ofApp::gray() {
 		}
 	}
 	grayDst.update();
-	grayDst.save("gray.jpg");
+	//grayDst.save("gray.jpg");
 }
 
 //--------------------------------------------------------------
@@ -316,13 +323,13 @@ void ofApp::medianFilter() {
 	//ピクセル取得 -> ソート -> 中央値を取得
 	//今回は3×3のみに対応
 
-	//（floatと色データのペア）の可変長配列
+	//（intと色データのペア）の可変長配列
 	std::vector<std::pair<int, ofColor>> colorDict;
 	//reverse()でサイズ指定（要素なしのメモリ確保）
 	colorDict.reserve(9);
 
-	for (int y = 1; y < height; y++) {
-		for (int x = 1; x < width; x++) {
+	for (int y = 1; y < height - 1; y++) {
+		for (int x = 1; x < width - 1; x++) {
 			colorDict.clear();
 			int index = y * width + x;
 
@@ -344,9 +351,8 @@ void ofApp::medianFilter() {
 			}
 			//sort()はデフォルトで昇順にソート
 			//pairの時はfirst優先でソート
-			//secondのofColorは比較の定義がされていないため、以下のラムダ式により
-			//firstのみで比較を行わせる（by chatGPT）
-
+			//secondのofColorは比較の定義がされていないため、以下の記述式により
+			//firstのみで比較を行わせる（made by chatGPT）
 			//これがないとsecondも比較しようとするためビルドエラーが発生
 			std::sort(colorDict.begin(), colorDict.end(),
 				[](const std::pair<int, ofColor>& a, const std::pair<int, ofColor>& b) {
@@ -364,7 +370,44 @@ void ofApp::medianFilter() {
 	}
 
 	medianDst.update();
-	medianDst.save("median.jpg");
+	//medianDst.save("median.jpg");
+}
+
+//--------------------------------------------------------------
+void ofApp::pixelSort() {
+	unsigned char* src_data = src.getPixels().getData();
+	unsigned char* dst_data = pixelDst.getPixels().getData();
+
+	std::vector<std::pair<int, ofColor>> pixelDict;
+
+	for (int y = 0; y < height; y++) {
+		pixelDict.clear();
+
+		for (int x = 0; x < width; x++) {
+			int index = y * width + x;
+
+			int R = src_data[index * 3 + 0];
+			int G = src_data[index * 3 + 1];
+			int B = src_data[index * 3 + 2];
+
+			int lumin = static_cast<int>(R * 0.299 + G * 0.587 + B * 0.114);
+			pixelDict.push_back({ lumin, ofColor(R, G, B) });
+		}
+
+		std::sort(pixelDict.begin(), pixelDict.end(),
+			[](const std::pair<int, ofColor>& a, const std::pair<int, ofColor>& b) {
+				return a.first < b.first;
+			});
+
+		for (int x = 0; x < width; x++) {
+			int index = y * width + x;
+			dst_data[index * 3 + 0] = pixelDict[x].second.r;
+			dst_data[index * 3 + 1] = pixelDict[x].second.g;
+			dst_data[index * 3 + 2] = pixelDict[x].second.b;
+		}
+	}
+
+	pixelDst.update();
 }
 
 //--------------------------------------------------------------
@@ -382,6 +425,7 @@ void ofApp::draw(){
 	//grayDst.draw(0, 0);
 	//otsuDst.draw(0, 0);
 	medianDst.draw(0, 0);
+	//pixelDst.draw(0, 0);
 }
 
 //--------------------------------------------------------------
